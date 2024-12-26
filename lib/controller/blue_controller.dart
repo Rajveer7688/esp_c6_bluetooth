@@ -24,7 +24,8 @@ class BluetoothController extends GetxController {
       isConnecting.value = true;
       debugPrint("Connecting to ${device.name ?? 'Device'}...");
 
-      BluetoothConnection connection = await BluetoothConnection.toAddress(device.address).timeout(
+      BluetoothConnection connection =
+          await BluetoothConnection.toAddress(device.address).timeout(
         const Duration(seconds: 30),
         onTimeout: () {
           throw TimeoutException("Connection attempt timed out.");
@@ -35,21 +36,27 @@ class BluetoothController extends GetxController {
         connectedDevices.add(device);
         pairedDevices.removeWhere((d) => d.address == device.address);
         debugPrint("Connected to ${device.name ?? 'Device'}");
-        TLoaders.successSnackBar(title: 'Connected', message: '${device.name ?? 'Device'} connected successfully.');
+        TLoaders.successSnackBar(
+            title: 'Connected',
+            message: '${device.name ?? 'Device'} connected successfully.');
       } else {
         debugPrint("Connection to ${device.name ?? 'Device'} failed.");
-        Get.snackbar('Oops..!', "${device.name ?? 'Device'} couldn't connect.", snackPosition: SnackPosition.BOTTOM);
+        Get.snackbar('Oops..!', "${device.name ?? 'Device'} couldn't connect.",
+            snackPosition: SnackPosition.BOTTOM);
       }
     } catch (e) {
       debugPrint("Error during connection: $e");
-      TLoaders.errorSnackBar(title: 'Oops..!', message: "${device.name ?? 'Device'} couldn't connect.");
+      TLoaders.errorSnackBar(
+          title: 'Oops..!',
+          message: "${device.name ?? 'Device'} couldn't connect.");
     } finally {
       isConnecting.value = false;
     }
   }
 
   /// -- 2. Disconnect Bluetooth Devices
-  Future<void> disconnectDevice(BluetoothDevice device, BluetoothConnection? connection) async {
+  Future<void> disconnectDevice(
+      BluetoothDevice device, BluetoothConnection? connection) async {
     try {
       isDisconnecting.value = true;
       debugPrint("Disconnecting from ${device.name ?? 'Device'}...");
@@ -71,19 +78,24 @@ class BluetoothController extends GetxController {
   /// -- 3. Pair Bluetooth Devices
   Future<bool> pairDevice(BluetoothDevice device) async {
     try {
-      List<BluetoothDevice> bondedDevices = await FlutterBluetoothSerial.instance.getBondedDevices();
+      List<BluetoothDevice> bondedDevices =
+          await FlutterBluetoothSerial.instance.getBondedDevices();
       bool isPaired = bondedDevices.any((d) => d.address == device.address);
 
       if (isPaired) {
-        debugPrint("Device ${device.name ?? 'Unknown Device'} is already paired.");
+        debugPrint(
+            "Device ${device.name ?? 'Unknown Device'} is already paired.");
         return true;
       }
 
       bool proceedWithPairing = await Get.defaultDialog(
         title: "Pairing Required",
-        content: Text("Device ${device.name ?? 'Unknown Device'} is not paired. Would you like to pair?"),
-        confirm: ElevatedButton(onPressed: () => Get.back(result: true), child: Text("Pair")),
-        cancel: ElevatedButton(onPressed: () => Get.back(result: false), child: Text("Cancel")),
+        content: Text(
+            "Device ${device.name ?? 'Unknown Device'} is not paired. Would you like to pair?"),
+        confirm: ElevatedButton(
+            onPressed: () => Get.back(result: true), child: Text("Pair")),
+        cancel: ElevatedButton(
+            onPressed: () => Get.back(result: false), child: Text("Cancel")),
       );
 
       if (!proceedWithPairing) {
@@ -91,8 +103,10 @@ class BluetoothController extends GetxController {
         return false;
       }
 
-      debugPrint("Attempting to pair with ${device.name ?? 'Unknown Device'}...");
-      bool? paired = await FlutterBluetoothSerial.instance.bondDeviceAtAddress(device.address);
+      debugPrint(
+          "Attempting to pair with ${device.name ?? 'Unknown Device'}...");
+      bool? paired = await FlutterBluetoothSerial.instance
+          .bondDeviceAtAddress(device.address);
 
       if (paired == true) {
         pairedDevices.add(device);
@@ -110,41 +124,52 @@ class BluetoothController extends GetxController {
     }
   }
 
+  bool isScanning = false;
+
   /// -- 4. Scan Bluetooth Devices
   Future<void> scanDevices() async {
+    if (isScanning) {
+      return; // Prevent starting another scan if one is already in progress
+    }
+
+    isScanning = true;
     if (await Permission.location.request().isGranted) {
-      if (await Permission.bluetoothScan.request().isGranted
-          && await Permission.bluetoothConnect.request().isGranted
-          && await Permission.locationWhenInUse.request().isGranted
-      ) {
+      if (await Permission.bluetoothScan.request().isGranted &&
+          await Permission.bluetoothConnect.request().isGranted &&
+          await Permission.locationWhenInUse.request().isGranted) {
         newDevices.clear();
 
-        List<BluetoothDevice> bondedDevices = await FlutterBluetoothSerial.instance.getBondedDevices();
+        List<BluetoothDevice> bondedDevices =
+            await FlutterBluetoothSerial.instance.getBondedDevices();
         pairedDevices.clear();
         pairedDevices.addAll(bondedDevices);
 
-        FlutterBluetoothSerial.instance.startDiscovery().listen((result) {
-          debugPrint('This is total devices: ${result.device}');
+        await FlutterBluetoothSerial.instance.startDiscovery().forEach((result) {
+          // debugPrint('This is total devices: ${result.device}');
           if (!bondedDevices.any((d) => d.address == result.device.address)) {
-              debugPrint('This is un-bonded devices: ${result.device}');
+            debugPrint('This is un-bonded device: ${result.device.address}');
             if (!newDevices.any((d) => d.address == result.device.address)) {
               newDevices.add(result.device);
-              debugPrint('This is new devices: ${result.device}');
+              debugPrint('This is new device: ${result.device.address}');
             }
           }
         });
+        debugPrint("current scanning task is completed");
       } else {
         debugPrint("Bluetooth permissions are not granted.");
       }
     } else {
       debugPrint("Location permission is not granted.");
     }
+    isScanning = false;
+ 
   }
 
   /// -- 5. Unpair Bluetooth Devices
   Future<void> unpairDevice(BluetoothDevice device) async {
     try {
-      bool? success = await FlutterBluetoothSerial.instance.removeDeviceBondWithAddress(device.address);
+      bool? success = await FlutterBluetoothSerial.instance
+          .removeDeviceBondWithAddress(device.address);
 
       if (success != null && success) {
         pairedDevices.removeWhere((d) => d.address == device.address);
