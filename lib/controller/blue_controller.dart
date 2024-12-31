@@ -171,7 +171,7 @@ class BluetoothController extends GetxController {
       bool? success = await FlutterBluetoothSerial.instance
           .removeDeviceBondWithAddress(device.address);
 
-      if (success != null && success) {
+      if (success!) {
         pairedDevices.removeWhere((d) => d.address == device.address);
         newDevices.add(device);
         debugPrint("Device unpaired successfully.");
@@ -182,4 +182,4 @@ class BluetoothController extends GetxController {
       debugPrint("Error during unpairing: $e");
     }
   }
-}
+ }
