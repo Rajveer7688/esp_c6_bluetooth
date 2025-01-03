@@ -1,3 +1,4 @@
+
 import 'package:blue/repositories/authentication_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,7 +10,8 @@ import 'app.dart';
 
 /// -- Entry point of Flutter App
 Future<void> main() async {
-  final WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  final WidgetsBinding widgetsBinding =
+      WidgetsFlutterBinding.ensureInitialized();
 
   /// -- GetX Local Storage
   await GetStorage.init();
@@ -19,6 +21,7 @@ Future<void> main() async {
 
   /// -- Manage all actions regarding authentications
   Get.put(AuthenticationRepository());
+  
 
   /// -- Await Splash until other items Load
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
