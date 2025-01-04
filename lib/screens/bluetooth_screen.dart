@@ -132,12 +132,13 @@ class BluetoothLayout extends StatelessWidget {
               children: [
                 GestureDetector(
                     onTap: () => isConnected ? controller.scanDevices() : {},
-                    child: Text(device.name ?? 'Unknown Device',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            fontSize: TSizes.fontSizeMd,
-                            fontWeight: FontWeight.w600))),
+                    child: Text(controller.deviceNames[device.address] ?? device.name ?? 'Unknow Device',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: TSizes.fontSizeMd,
+                              fontWeight: FontWeight.w600)),
+                    ),
                 Row(
                   children: [
                     isConnected
@@ -170,8 +171,14 @@ class BluetoothLayout extends StatelessWidget {
                     color: dark ? TColors.black : TColors.primaryBackground,
                     shape: BoxShape.circle),
                 child: IconButton(
-                  onPressed: () => isPaired ? controller.connectDevice(device) : isConnected ? controller.disconnectDevice(device,) : controller.pairDevice(device, context),
-              
+                  onPressed: () => isPaired
+                    //  ? controller.connectDevice(device)
+                    ? controller.showRenameDialog(context, device)
+                      : isConnected
+                          ? controller.disconnectDevice(
+                              device,context
+                            )
+                          : controller.pairDevice(device, context),
                   icon: Icon(
                       isPaired
                           ? Iconsax.link
