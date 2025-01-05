@@ -9,6 +9,18 @@ class TTexts {
   static const String submit = "Submit";
   static const String appName = "Dripto";
   static const String tContinue = "Continue";
+  static const String cancel = "Cancel";
+  static const String save = "Save";
+  static const String pair = "Pair";
+  static const String unpair = "Unpair";
+  static const String scan = "Scan";
+  static const String connected = "Connected";
+  static const String bluetoothName = "Bluetooth Name";
+
+  // -- Specific Texts
+  static const String bluetooth = "Bluetooth";
+  static const String location = "Location";
+  static const String wifi = "Wi-Fi";
 
 
   // -- OnBoarding Texts
@@ -22,12 +34,6 @@ class TTexts {
 
 
   // -- Authentication Forms
-  static const String hospitalName = "Hospital Name";
-  static const String addressLine = "Address Line";
-  static const String city = "City";
-  static const String state = "State";
-  static const String pinCode = "Pin Code";
-  static const String floorNum = "Floors";
   static const String firstName = "First Name";
   static const String lastName = "Last Name";
   static const String email = "E-Mail";
@@ -69,8 +75,8 @@ class TTexts {
 
 
   // -- Home
-  static const String homeAppbarTitle = "Good Day for Smile";
-  static const String homeAppbarSubTitle = "Dripto";
+  static const String homeAppbarTitle = "Welcome 👋";
+  static const String homeAppbarSubTitle = "Have a Good Day";
 
 }
 
