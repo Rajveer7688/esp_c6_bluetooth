@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "171720123648",
+    "project_id": "dripto-bluetooth",
+    "storage_bucket": "dripto-bluetooth.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:171720123648:android:c67535df75ac0b08553fe5",
+        "android_client_info": {
+          "package_name": "com.dripto.blue"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTdCHYlg1GDVtaRn4b9avcHYtM0pTMDE8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

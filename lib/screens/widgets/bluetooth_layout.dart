@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
-import 'package:get/get.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:iconsax/iconsax.dart';
 
 import '../../controller/blue_controller.dart';
@@ -22,7 +21,7 @@ class BluetoothLayout extends StatelessWidget {
       width: double.infinity,
       margin: EdgeInsets.symmetric(vertical: TSizes.sm),
       padding: EdgeInsets.all(TSizes.md),
-      decoration: BoxDecoration(color: dark ? TColors.dark : TColors.lightGrey.withOpacity(0.6), borderRadius: BorderRadius.circular(TSizes.sm), shape: BoxShape.rectangle),
+      decoration: BoxDecoration(color: dark ? TColors.dark : TColors.lightGrey.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(TSizes.sm), shape: BoxShape.rectangle),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -30,18 +29,18 @@ class BluetoothLayout extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                GestureDetector(
-                  onTap: () => isConnected ? controller.renameDevice(context, device) : {},
-                  child: Obx(() {
-                    controller.updateDeviceName(device);
-                    final deviceName = controller.deviceNames[device.address] ?? 'Unknown Device';
-                    return Text(deviceName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: TSizes.fontSizeMd, fontWeight: FontWeight.w600));
-                  }),
-                ),
+                // GestureDetector(
+                //   onTap: () => isConnected ? controller.renameDevice(context, device) : {},
+                //   child: Obx(() {
+                //     // controller.updateDeviceName(device);
+                //     final deviceName = controller.deviceNames[device.address] ?? 'Unknown Device';
+                //     return Text(deviceName, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: TSizes.fontSizeMd, fontWeight: FontWeight.w600));
+                //   }),
+                // ),
                 Row(
                   children: [
                     isConnected ? Container(width: 6, height: 6, margin: EdgeInsets.only(right: 6), decoration: BoxDecoration(color: TColors.success, shape: BoxShape.circle)) : SizedBox(),
-                    Text(isConnected ? TTexts.connected : device.address, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: TSizes.fontSizeSm, fontWeight: FontWeight.w300)),
+                    Text(isConnected ? TTexts.connected : 'device address', overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: TSizes.fontSizeSm, fontWeight: FontWeight.w300)),
                   ],
                 )
               ],
@@ -51,18 +50,29 @@ class BluetoothLayout extends StatelessWidget {
 
           Row(
             children: [
-              Text('|', style: TextStyle(color: Colors.grey)),
-              SizedBox(width: TSizes.md),
-              Container(
+              isConnected ? SizedBox.shrink() : Text('|', style: TextStyle(color: Colors.grey)),
+              SizedBox(width: TSizes.sm),
+              isConnected ? Container(
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(color: dark ? TColors.black : TColors.primaryBackground, shape: BoxShape.circle),
                 child: IconButton(
-                  onPressed: () => isPaired ? controller.connectDevice(device, context) : isConnected ? controller.disconnectDevice(device, context) : controller.pairDevice(device, context),
-                  icon: Icon(isPaired ? Iconsax.link : isConnected ? Iconsax.bluetooth_2 : Iconsax.add, color: TColors.primary, size: 18),
+                  onPressed: () => {},
+                  icon: Icon(Iconsax.send_square, color: TColors.primary, size: 18),
                   padding: EdgeInsets.zero,
                 ),
-              ),
+              ) : SizedBox.shrink(),
+              SizedBox(width: TSizes.sm),
+              // Container(
+              //   width: 32,
+              //   height: 32,
+              //   decoration: BoxDecoration(color: dark ? TColors.black : TColors.primaryBackground, shape: BoxShape.circle),
+              //   child: IconButton(
+              //     onPressed: () => isPaired ? controller.unpairConnectDialogBox(context, device) : isConnected ? controller.disconnectDevice(device) : controller.pairDevice(device),
+              //     icon: Icon(isPaired ? Iconsax.link : isConnected ? Iconsax.bluetooth_2 : Iconsax.add, color: TColors.primary, size: 18),
+              //     padding: EdgeInsets.zero,
+              //   ),
+              // ),
             ],
           )
         ],

@@ -15,12 +15,17 @@ class TTexts {
   static const String unpair = "Unpair";
   static const String scan = "Scan";
   static const String connected = "Connected";
+  static const String active = "Active";
+  static const String inactive = "Inactive";
+  static const String connect = "Connect";
+  static const String addDevice = "Add Device";
   static const String bluetoothName = "Bluetooth Name";
 
   // -- Specific Texts
   static const String bluetooth = "Bluetooth";
   static const String location = "Location";
   static const String wifi = "Wi-Fi";
+  static const String devices = "Devices";
 
 
   // -- OnBoarding Texts

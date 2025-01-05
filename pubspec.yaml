@@ -13,17 +13,14 @@ dependencies:
   # Utility Package
   intl: ^0.20.1
   location: ^7.0.1
-  wifi_iot: ^0.3.19+1
   url_launcher: ^6.2.6
-  flutter_lints: ^5.0.0
-  flutter_spinkit: ^5.2.1
   connectivity_plus: ^6.1.0
-  smooth_page_indicator: ^1.1.0
-  flutter_native_splash: ^2.4.0
-
-  # Bluetooth Package
-  flutter_bluetooth_serial: ^0.4.0
   permission_handler: ^11.3.1
+  smooth_page_indicator: ^1.1.0
+
+  fl_chart: ^0.70.2
+  file_picker: ^10.3.3
+  csv: ^6.0.0
 
   # Icons
   iconsax: ^0.0.8
@@ -34,9 +31,17 @@ dependencies:
   cloud_firestore: ^5.6.0
   firebase_storage: ^12.3.7
 
+  # Flutter
+  flutter_lints: ^5.0.0
+  flutter_spinkit: ^5.2.1
+  flutter_native_splash: ^2.4.0
+  flutter_blue_plus: ^1.31.15
+  path_provider: ^2.1.5
+
   # State Management
   get: ^4.6.6
   get_storage: ^2.1.1
+  google_fonts: ^6.3.0
 
 dev_dependencies:
   flutter_test:

@@ -26,5 +26,5 @@ Future<void> main() async {
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   /// -- Main App Starts here...
-  runApp(const App());
+  runApp(App());
 }

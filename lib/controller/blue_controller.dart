@@ -1,482 +1,478 @@
 import 'dart:async';
-import 'package:blue/controller/switch_controller.dart';
-import 'package:blue/models/bluetooth_model.dart';
-import 'package:blue/repositories/bluetooth_repository.dart';
-import 'package:blue/utils/constants/colors.dart';
-import 'package:blue/utils/constants/sizes.dart';
-import 'package:blue/utils/constants/text_strings.dart';
-import 'package:blue/utils/helpers/helper_functions.dart';
-import 'package:blue/utils/popups/loaders.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'package:csv/csv.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:get/get.dart';
-import 'package:iconsax/iconsax.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../utils/validators/validation.dart';
+import '../models/sensor_model.dart';
+
+enum BluetoothConnectionStatus { disconnected, connecting, connected }
 
 class BluetoothController extends GetxController {
   static BluetoothController get instance => Get.find();
 
   /// -- Functional Variables
-  final isPairing = false.obs;
-  final isScanning = false.obs;
-  final isConnecting = false.obs;
-  final isDisconnecting = false.obs;
-  final newDevices = <BluetoothDevice>[].obs;
-  final pairedDevices = <BluetoothDevice>[].obs;
-  final filteredDevices = <BluetoothDevice>[].obs;
-  final connectedDevices = <BluetoothDevice>[].obs;
-  RxMap<String, String> deviceNames = <String, String>{}.obs;
+  var isScanning = false.obs;
+  var isConnected = false.obs;
+  var isSyncing = false.obs;
+  var statusMessage = "Disconnected".obs;
+  var sensorData = <SensorData>[].obs;
+  var realTimeData = <String>[].obs;
 
-  /// -- Static Variables
-  Timer? _timer;
-  final repository = Get.put(BluetoothRepository());
-  final switchController = Get.put(SwitchController());
-  Map<String, BluetoothConnection> activeConnections = {};
+  /// -- Container Data
+  final heartBeatCurrent = 0.obs;
+  final spo2Current = 0.0.obs;
+  final accelXCurrent = 0.obs;
+  final accelYCurrent = 0.obs;
+  final accelZCurrent = 0.obs;
+  final gyroXCurrent = 0.obs;
+  final gyroYCurrent = 0.obs;
+  final gyroZCurrent = 0.obs;
 
-  /// -- Form Data for Device Rename
-  final name = TextEditingController();
-  GlobalKey<FormState> nameFormKey = GlobalKey<FormState>();
+  /// -- Graph Data
+  var bpmPoints = <FlSpot>[].obs;
+  var spo2Points = <FlSpot>[].obs;
+  var accelXPoints = <FlSpot>[].obs;
+  var accelYPoints = <FlSpot>[].obs;
+  var accelZPoints = <FlSpot>[].obs;
+  var gyroXPoints = <FlSpot>[].obs;
+  var gyroYPoints = <FlSpot>[].obs;
+  var gyroZPoints = <FlSpot>[].obs;
+
+  /// -- Graph configuration
+  var timeCounter = 0.0.obs;
+  final maxDataPoints = 1000;
+
+  /// -- Memory Info
+  var memoryUsed = 0.obs;
+  var memoryFree = 0.obs;
+  var memoryPercentage = 0.0.obs;
+
+  /// -- Bluetooth related variables
+  BluetoothDevice? connectedDevice;
+  BluetoothService? smartWatchService;
+  BluetoothCharacteristic? dataCharacteristic;
+  BluetoothCharacteristic? commandCharacteristic;
+
+  StreamSubscription<List<int>>? dataSubscription;
+  StreamSubscription<bool>? scanSubscription;
+  StreamSubscription<BluetoothConnectionState>? connectionSubscription;
 
   @override
-  void onInit() {
+  void onInit() async {
     super.onInit();
-    scanDevices();
-    checkAllRequirements();
-    startVerifyingDeviceStatus();
+    _checkPermissions();
+    _setupBluetoothListeners();
+    _initializeGraphs();
   }
 
-  /// -- 1. Scan Bluetooth Devices
-  Future<void> scanDevices() async {
+  @override
+  void onClose() {
+    dataSubscription?.cancel();
+    scanSubscription?.cancel();
+    connectionSubscription?.cancel();
+    disconnect();
+    super.onClose();
+  }
+
+  void _initializeGraphs() {
+    for (int i = 0; i < 10; i++) {
+      bpmPoints.add(FlSpot(i.toDouble(), 0));
+      spo2Points.add(FlSpot(i.toDouble(), 0));
+      accelXPoints.add(FlSpot(i.toDouble(), 0));
+      accelYPoints.add(FlSpot(i.toDouble(), 0));
+      accelZPoints.add(FlSpot(i.toDouble(), 0));
+      gyroXPoints.add(FlSpot(i.toDouble(), 0));
+      gyroYPoints.add(FlSpot(i.toDouble(), 0));
+      gyroZPoints.add(FlSpot(i.toDouble(), 0));
+    }
+  }
+
+  void _addDataPoint(int bpm, double spo2, int accelX, int accelY, int accelZ, int gyroX, int gyroY, int gyroZ) {
+    timeCounter.value += 1.0;
+
+    bpmPoints.add(FlSpot(timeCounter.value, double.tryParse(bpm.toString()) ?? 0.0));
+    spo2Points.add(FlSpot(timeCounter.value, spo2));
+    accelXPoints.add(FlSpot(timeCounter.value, double.tryParse(accelX.toString()) ?? 0.0));
+    accelYPoints.add(FlSpot(timeCounter.value, double.tryParse(accelY.toString()) ?? 0.0));
+    accelZPoints.add(FlSpot(timeCounter.value, double.tryParse(accelZ.toString()) ?? 0.0));
+    gyroXPoints.add(FlSpot(timeCounter.value, double.tryParse(gyroX.toString()) ?? 0.0));
+    gyroYPoints.add(FlSpot(timeCounter.value, double.tryParse(gyroY.toString()) ?? 0.0));
+    gyroZPoints.add(FlSpot(timeCounter.value, double.tryParse(gyroZ.toString()) ?? 0.0));
+
+    if (bpmPoints.length > maxDataPoints) {
+      bpmPoints.removeAt(0);
+      spo2Points.removeAt(0);
+      accelXPoints.removeAt(0);
+      accelYPoints.removeAt(0);
+      accelZPoints.removeAt(0);
+      gyroXPoints.removeAt(0);
+      gyroYPoints.removeAt(0);
+      gyroZPoints.removeAt(0);
+    }
+  }
+
+  void clearGraphData() {
+    bpmPoints.clear();
+    spo2Points.clear();
+    accelXPoints.clear();
+    accelYPoints.clear();
+    accelZPoints.clear();
+    gyroXPoints.clear();
+    gyroYPoints.clear();
+    gyroZPoints.clear();
+    timeCounter.value = 0;
+    _initializeGraphs();
+  }
+
+  Future<void> _checkPermissions() async {
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.bluetooth,
+      Permission.bluetoothAdvertise,
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+      Permission.locationWhenInUse,
+      Permission.storage,
+    ].request();
+
+    if (statuses[Permission.bluetoothScan] != PermissionStatus.granted) {
+      Get.snackbar("Permission Required", "Bluetooth permissions required", snackPosition: SnackPosition.BOTTOM);
+    }
+  }
+
+  void _setupBluetoothListeners() {
+    scanSubscription = FlutterBluePlus.isScanning.listen((state) {
+      isScanning.value = state;
+    });
+  }
+
+  Future<void> startScan() async {
     try {
-      var isRequired = await checkAllRequirements();
-      if (isRequired > 0) { showRequiredMessage(isRequired); return; }
+      await FlutterBluePlus.stopScan();
 
-      if (isScanning.value) return;
-      isScanning(true);
+      isScanning.value = true;
+      updateStatus("Scanning for devices...");
 
-      if (await Permission.location.request().isGranted) {
-        if (await Permission.bluetoothScan.request().isGranted &&
-            await Permission.bluetoothConnect.request().isGranted &&
-            await Permission.locationWhenInUse.request().isGranted) {
+      await FlutterBluePlus.startScan(timeout: Duration(seconds: 10), withServices: [Guid(ServiceUUID.smartWatch)]);
+      FlutterBluePlus.scanResults.listen((results) {
+        for (ScanResult result in results) {
+          if (result.device.advName == "SMART_WATCH_SPAG" || result.device.remoteId.toString().contains("SMART_WATCH_SPAG")) {
+            FlutterBluePlus.stopScan();
+            _connectToDevice(result.device);
+            break;
+          }
+        }
+      });
+    } catch (e) {
+      updateStatus("Scan error: $e");
+      isScanning.value = false;
+    }
+  }
 
-          /// Clear all the previous data
-          newDevices.clear();
-          pairedDevices.clear();
-          connectedDevices.clear();
+  Future<void> _connectToDevice(BluetoothDevice device) async {
+    try {
+      updateStatus("Connecting...");
 
-          /// Update Paired and Connected devices list
-          List<BluetoothDevice> bondedDevices = await FlutterBluetoothSerial.instance.getBondedDevices();
-          if (bondedDevices.isNotEmpty) {
-            for (var device in bondedDevices) {
-              if (device.isConnected) connectedDevices.add(device);
-              if (device.isBonded && !device.isConnected) pairedDevices.add(device);
-              if (device.isBonded && (deviceNames[device.address] == null || deviceNames[device.address]!.isEmpty)) deviceNames[device.address] = device.name ?? 'Unknown Device';
-              updateDeviceName(device);
+      await device.connect();
+      connectedDevice = device;
+
+      List<BluetoothService> services = await device.discoverServices();
+      for (BluetoothService service in services) {
+        if (service.uuid.toString().toLowerCase() == ServiceUUID.smartWatch.toLowerCase()) {
+          smartWatchService = service;
+
+          for (BluetoothCharacteristic characteristic in service.characteristics) {
+            String charUUID = characteristic.uuid.toString().toLowerCase();
+            if (charUUID == CharacteristicUUID.data.toLowerCase()) {
+              dataCharacteristic = characteristic;
+            } else if (charUUID == CharacteristicUUID.command.toLowerCase()) {
+              commandCharacteristic = characteristic;
             }
           }
-
-          await FlutterBluetoothSerial.instance.startDiscovery().forEach((result) {
-            if (!bondedDevices.any((d) => d.address == result.device.address)) {
-              if (!newDevices.any((d) => d.address == result.device.address)) {
-                newDevices.add(result.device);
-                filterAvailableDevices('');
-              }
-            }
-          });
-
-          /// Update everything
-          update();
-
-          debugPrint("current scanning task is completed");
-        } else {
-          TLoaders.customToast(message: 'Bluetooth permissions are not granted.');
+          break;
         }
+      }
+
+      if (dataCharacteristic != null && commandCharacteristic != null) {
+        await dataCharacteristic!.setNotifyValue(true);
+        dataSubscription = dataCharacteristic!.onValueReceived.listen(_handleData);
+
+        isConnected.value = true;
+        updateStatus("Connected to SMART_WATCH_SPAG");
+
+        connectionSubscription = device.connectionState.listen((state) {
+          if (state == BluetoothConnectionState.disconnected) {
+            _onDisconnected();
+          }
+        });
       } else {
-        TLoaders.customToast(message: 'Location permission is not granted.');
+        updateStatus("Service characteristics not found");
       }
     } catch (e) {
-      debugPrint("scanning show error: $e");
-      TLoaders.customToast(message: 'Something went wrong, please try again.');
-    } finally {
-      isScanning(false);
+      updateStatus("Connection failed: $e");
     }
   }
 
-  /// -- 2. Pair Bluetooth Devices
-  Future<bool> pairDevice(BluetoothDevice device, BuildContext context) async {
+  void _handleData(List<int> value) {
     try {
-      var isRequired = await checkAllRequirements();
-      if (isRequired > 0) { showRequiredMessage(isRequired); return false; }
+      String data = utf8.decode(value);
+      debugPrint("Received: $data");
 
-      List<BluetoothDevice> bondedDevices = await FlutterBluetoothSerial.instance.getBondedDevices();
-      bool isPaired = bondedDevices.any((d) => d.address == device.address);
-
-      if (isPaired) {
-        TLoaders.customToast(message: "${device.name ?? 'Device'} is already paired.");
-        return true;
+      realTimeData.insert(0, "$data\n");
+      if (realTimeData.length > 10) {
+        realTimeData.removeLast();
       }
 
-      bool proceedWithPairing = await showPairUnpairDialog(context, device, true);
-      if (!proceedWithPairing) return false;
-
-      bool? paired = await FlutterBluetoothSerial.instance.bondDeviceAtAddress(device.address);
-      if (paired == true) {
-        pairedDevices.add(device);
-        if (deviceNames[device.address] == null || deviceNames[device.address]!.isEmpty) deviceNames[device.address] = device.name ?? 'Unknown Device';
-        filteredDevices.removeWhere((d) => d.address == device.address);
-        newDevices.removeWhere((d) => d.address == device.address);
-        pairedDevices.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
-        verifyDeviceStatus();
-        debugPrint("Device paired successfully.");
-        return true;
+      if (data.startsWith("RT:")) {
+        _handleRealTimeData(data);
+      } else if (data.startsWith("DATA:")) {
+        _handleSyncData(data);
+      } else if (data.startsWith("SYNC_COMPLETE:")) {
+        _handleSyncComplete(data);
+      } else if (data.startsWith("MEM_INFO:")) {
+        _handleMemoryInfo(data);
       } else {
-        TLoaders.customToast(message: 'Something went wrong, device not paired.');
-        return false;
+        _handleRealTimeData(data);
       }
     } catch (e) {
-      debugPrint("Error during pairing: $e");
-      TLoaders.customToast(message: 'Something went wrong, device not paired.');
-      return false;
+      debugPrint("Data parsing error: $e");
     }
   }
 
-  /// -- 3. Unpair Bluetooth Devices
-  Future<void> unpairDevice(BluetoothDevice device, BuildContext context) async {
+  void _handleRealTimeData(String data) {
     try {
-      var isRequired = await checkAllRequirements();
-      if (isRequired > 0) { showRequiredMessage(isRequired); return; }
+      Map<String, String> realTimeValues = {};
+      List<String> parts = data.replaceFirst("RT:", "").split("|");
 
-      bool proceedWithUnpairing = await showPairUnpairDialog(context, device, false);
-
-      if (!proceedWithUnpairing) {
-        debugPrint("User cancelled unpairing.");
-        return;
+      for (String part in parts) {
+        List<String> keyValue = part.split("=");
+        if (keyValue.length == 2) {
+          realTimeValues[keyValue[0]] = keyValue[1];
+        }
       }
 
-      bool? success = await FlutterBluetoothSerial.instance.removeDeviceBondWithAddress(device.address);
+      int bpm = int.parse(realTimeValues['BPM'] ?? '0');
+      double spo2 = double.parse(realTimeValues['SpO2'] ?? '0');
 
-      if (success != null && success) {
-        connectedDevices.removeWhere((d) => d.address == device.address);
-        pairedDevices.removeWhere((d) => d.address == device.address);
-        newDevices.add(device);
-        debugPrint("Device unpaired successfully.");
-      } else {
-        debugPrint("Failed to unpair the device.");
-      }
+      List<String> accelValues = parts[2].split(":")[1].split(",");
+      int accelX = int.tryParse(accelValues[0].split("=")[1]) ?? 0;
+      int accelY = int.tryParse(accelValues[1].split("=")[1]) ?? 0;
+      int accelZ = int.tryParse(accelValues[2].split("=")[1]) ?? 0;
+
+      List<String> gyroValues = parts[3].split(":")[1].split(",");
+      int gyroX = int.tryParse(gyroValues[0].split("=")[1]) ?? 0;
+      int gyroY = int.tryParse(gyroValues[1].split("=")[1]) ?? 0;
+      int gyroZ = int.tryParse(gyroValues[2].split("=")[1]) ?? 0;
+
+      heartBeatCurrent.value = bpm;
+      spo2Current.value = spo2;
+      accelXCurrent.value = accelX;
+      accelYCurrent.value = accelY;
+      accelZCurrent.value = accelZ;
+      accelZCurrent.value = accelZ;
+      gyroXCurrent.value = gyroX;
+      gyroYCurrent.value = gyroY;
+      gyroZCurrent.value = gyroZ;
+
+      _addDataPoint(bpm, spo2, accelX, accelY, accelZ, gyroX, gyroY, gyroZ);
+
+      update();
+      updateStatus("Real-time: HR ${realTimeValues['BPM']} SpO2 ${realTimeValues['SpO2']}");
     } catch (e) {
-      debugPrint("Error during unpairing: $e");
+      debugPrint("Real-time data error: $e");
     }
   }
 
-  /// -- 4. Connect Bluetooth Devices
-  Future<void> connectDevice(BluetoothDevice device, BuildContext context) async {
+  void _handleSyncData(String data) {
     try {
-      var isRequired = await checkAllRequirements();
-      if (isRequired > 0) { showRequiredMessage(isRequired); return; }
+      List<String> parts = data.split(":");
+      if (parts.length == 11) {
+        SensorData sensorDataPoint = SensorData(
+          packetNumber: int.parse(parts[1]),
+          timestamp: int.parse(parts[2]),
+          heartRate: int.parse(parts[3]),
+          spO2: double.parse(parts[4]),
+          accelX: int.parse(parts[5]),
+          accelY: int.parse(parts[6]),
+          accelZ: int.parse(parts[7]),
+          gyroX: int.parse(parts[8]),
+          gyroY: int.parse(parts[9]),
+          gyroZ: int.parse(parts[10]),
+          receivedAt: DateTime.now(),
+        );
+        sensorData.add(sensorDataPoint);
 
-      isConnecting.value = true;
-      debugPrint("Connecting to ${device.name ?? 'Device'}...");
+        _addDataPoint(
+            sensorDataPoint.heartRate,
+            sensorDataPoint.spO2,
+            sensorDataPoint.accelX,
+            sensorDataPoint.accelY,
+            sensorDataPoint.accelZ,
+            sensorDataPoint.gyroX,
+            sensorDataPoint.gyroY,
+            sensorDataPoint.gyroZ
+        );
 
-      BluetoothConnection connection = await BluetoothConnection.toAddress(device.address);
-      debugPrint('This is connection: $connection');
-
-      if (connection.isConnected) {
-        if (!connectedDevices.contains(device)) connectedDevices.add(device);
-        if (deviceNames[device.address] == null || deviceNames[device.address]!.isEmpty) deviceNames[device.address] = device.name ?? 'Unknown Device';
-        pairedDevices.removeWhere((d) => d.address == device.address);
-        activeConnections[device.address] = connection;
-        debugPrint("Connected to ${device.name ?? 'Device'}");
-        TLoaders.successSnackBar(title: 'Connected', message: '${device.name ?? 'Device'} connected successfully.');
-      } else {
-        debugPrint("Connection to ${deviceNames[device.address] ?? device.name ?? 'Device'} failed.");
-        TLoaders.customToast(message: "${deviceNames[device.address] ?? device.name ?? 'Device'} couldn't connect.");
+        update();
+        updateStatus("Received packet ${parts[1]}");
       }
-    } on PlatformException {
-      await unpairDevice(device, context);
-      debugPrint('This is connect again.');
     } catch (e) {
-      debugPrint("Error during connection: $e");
-      TLoaders.customToast(message: "${deviceNames[device.address] ?? device.name ?? 'Device'} couldn't connect.");
-    } finally {
-      isConnecting.value = false;
+      debugPrint("Sync data error: $e");
     }
   }
 
-  /// -- 5. Disconnect Bluetooth Devices
-  Future<void> disconnectDevice(BluetoothDevice device, BuildContext context) async {
+  void _handleSyncComplete(String data) {
+    isSyncing.value = false;
+    updateStatus("Sync complete! Received ${sensorData.length} data points");
+    Get.snackbar("Sync Complete", "Sync completed with ${sensorData.length} records", snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.green, colorText: Colors.white);
+  }
+
+  void _handleMemoryInfo(String data) {
     try {
-      var isRequired = await checkAllRequirements();
-      if (isRequired > 0) { showRequiredMessage(isRequired); return; }
+      String info = data.replaceFirst("MEM_INFO:", "");
+      debugPrint('This is memory info: $info}');
 
-      isDisconnecting.value = true;
-      debugPrint("Disconnecting from ${device.name ?? 'Device'}...");
+      List<String> parts = info.split(",");
 
-      BluetoothConnection? connection = activeConnections[device.address];
-      debugPrint('This is connection value: $connection');
-
-      if (connection == null) {
-        debugPrint("No active connection found for ${device.name ?? 'Device'}.");
-        await unpairDevice(device, context);
-        debugPrint('Unpair Device successfully');
-        TLoaders.customToast(message: 'Disconnected from ${device.name ?? 'This Device'} successfully.');
-        return;
+      for (String part in parts) {
+        List<String> keyValue = part.split("=");
+        if (keyValue.length == 2) {
+          if (keyValue[0] == "Used") {
+            memoryUsed.value = int.tryParse(keyValue[1]) ?? 0;
+          } else if (keyValue[0] == "Free") {
+            memoryFree.value = int.tryParse(keyValue[1]) ?? 0;
+          }
+        }
       }
 
-      if (connection.isConnected) {
-        await connection.close();
-        await connection.finish();
-        activeConnections.remove(device.address);
-        verifyDeviceStatus();
-        debugPrint("Disconnected from ${device.name ?? 'Device'} successfully.");
-      } else {
-        debugPrint("${device.name ?? 'Device'} is already disconnected.");
+      int total = memoryUsed.value + memoryFree.value;
+      if (total > 0) {
+        memoryPercentage.value = (memoryUsed.value / total) * 100;
       }
 
-      connectedDevices.removeWhere((d) => d.address == device.address);
-      if (!pairedDevices.contains(device)) pairedDevices.add(device);
-      debugPrint("Disconnected successfully.");
+      debugPrint('This is percentage: ${memoryPercentage.value}');
+
+      update();
+      updateStatus(data);
     } catch (e) {
-      debugPrint("Error during disconnection: $e");
-    } finally {
-      isDisconnecting.value = false;
+      debugPrint("Memory info error: $e");
     }
   }
 
-  /// -- 6. Rename of Bluetooth Devices
-  Future<void> renameDevice(BuildContext context, BluetoothDevice device) async {
-    // If Device is not connected
-    if (!connectedDevices.contains(device)) {
-      TLoaders.customToast(message: 'Please connect your device and try again.');
-      verifyDeviceStatus();
+  void updateStatus(String message) {
+    statusMessage.value = message;
+    debugPrint("Status: $message");
+  }
+
+  Future<void> sendCommand(String command) async {
+    if (commandCharacteristic == null || !isConnected.value) {
+      updateStatus("Not connected");
       return;
     }
 
-    // Update the value of device name
-    name.text = deviceNames[device.address] ?? device.name ?? 'Unknown Device';
-    String newName = await showRenameDialog(context, device);
-
-    if (newName.isEmpty) return;
-
-    final bluetoothData = BluetoothModel(id: '', name: newName, macAddress: device.address, bluetoothType: device.type.stringValue);
-    await repository.addOrUpdateBluetooth(bluetoothData);
-    debugPrint('Data saved in firebase successfully!');
-    deviceNames[device.address] = newName;
-    updateDeviceName(device);
-    name.clear();
-    debugPrint('Device name updated successfully: ${deviceNames[device.address]}');
+    try {
+      await commandCharacteristic!.write(utf8.encode(command));
+      updateStatus("Command sent: $command");
+    } catch (e) {
+      updateStatus("Command failed: $e");
+    }
   }
 
-  /// -- 7. Show Device Rename Dialog Box
-  Future<dynamic> showRenameDialog(BuildContext context, BluetoothDevice device) {
-    return showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(TSizes.defaultSpace / 2)),
-            contentPadding: EdgeInsets.zero,
-            content: Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(TSizes.defaultSpace * 0.8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text('Edit Bluetooth Name', style: TextStyle(fontSize: TSizes.fontSizeMd, fontWeight: FontWeight.bold)),
-                  SizedBox(height: TSizes.defaultSpace * 0.8),
+  Future<void> syncData() async {
+    if (!isConnected.value) {
+      updateStatus("Not connected");
+      return;
+    }
 
-                  Form(
-                    key: BluetoothController.instance.nameFormKey,
-                      child: TextFormField(
-                        controller: BluetoothController.instance.name,
-                        validator: (value) => TValidator.validateEmptyText('Bluetooth Rename', value),
-                        keyboardType: TextInputType.name,
-                        decoration: const InputDecoration(prefixIcon: Icon(Iconsax.user, size: 18), labelText: TTexts.bluetoothName),
-                      )
-                  ),
+    isSyncing.value = true;
+    sensorData.clear();
+    clearGraphData();
 
-                  SizedBox(height: TSizes.defaultSpace * 0.8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      SizedBox(
-                        width: 100,
-                        child: TextButton(
-                          onPressed: () => Get.back(result: ''),
-                          style: TextButton.styleFrom(
-                            foregroundColor: TColors.black,
-                            backgroundColor: Colors.grey[300],
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(TSizes.buttonRadius * 0.8)),
-                            padding: EdgeInsets.symmetric(horizontal: TSizes.defaultSpace, vertical: TSizes.defaultSpace / 2),
-                          ),
-                          child: Text(TTexts.cancel),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 100,
-                        child: TextButton(
-                          onPressed: () {
-                            if (!nameFormKey.currentState!.validate()) return;
-                            debugPrint('This is name: ${name.text.trim()}');
-                            Get.back(result: name.text.trim());
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: TColors.primary,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(TSizes.buttonRadius * 0.8)),
-                            padding: EdgeInsets.symmetric(horizontal: TSizes.defaultSpace, vertical: TSizes.defaultSpace / 2),
-                          ),
-                          child: Text(TTexts.save, style: TextStyle(color: Colors.white, fontSize: TSizes.fontSizeMd * 0.8, fontWeight: FontWeight.w600)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-    );
+    update();
+    updateStatus("Starting data sync...");
+    await sendCommand("SYNC_DATA");
   }
 
-  /// -- 8. Show Pair Device Dialog Box
-  Future<dynamic> showPairUnpairDialog(BuildContext context, BluetoothDevice device, bool isPairing) {
-    return showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          final dark = THelperFunctions.isDarkMode(context);
-          return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(TSizes.defaultSpace / 2)),
-            contentPadding: EdgeInsets.zero,
-            content: Container(
-              width: double.infinity,
-              padding: EdgeInsets.all(TSizes.defaultSpace * 0.8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(isPairing ? 'Bluetooth Pairing Request' : 'Unpair ${device.name ?? 'Device'}?', style: TextStyle(fontSize: TSizes.fontSizeMd, fontWeight: FontWeight.bold)),
-                  SizedBox(height: TSizes.defaultSpace / 2),
-                  Text(
-                    isPairing ? 'Pair with ${device.name ?? 'Unknown Device'}?' : "To connect to this device in the future, you'll need to pair it again.",
-                    style: TextStyle(fontSize: TSizes.fontSizeSm, color: dark ? TColors.lightGrey : TColors.darkGrey),
-                  ),
-                  SizedBox(height: TSizes.defaultSpace * 0.8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      SizedBox(
-                        width: 100,
-                        child: TextButton(
-                          onPressed: () => Get.back(result: false),
-                          style: TextButton.styleFrom(
-                            foregroundColor: TColors.black,
-                            backgroundColor: Colors.grey[300],
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(TSizes.buttonRadius * 0.8)),
-                            padding: EdgeInsets.symmetric(horizontal: TSizes.defaultSpace, vertical: TSizes.defaultSpace / 2),
-                          ),
-                          child: Text(TTexts.cancel),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 100,
-                        child: TextButton(
-                          onPressed: () => Get.back(result: true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: TColors.primary,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(TSizes.buttonRadius * 0.8)),
-                            padding: EdgeInsets.symmetric(horizontal: TSizes.defaultSpace, vertical: TSizes.defaultSpace / 2),
-                          ),
-                          child: Text(isPairing ? TTexts.pair : TTexts.unpair, style: TextStyle(color: Colors.white, fontSize: TSizes.fontSizeMd * 0.8, fontWeight: FontWeight.w600)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-    );
+  Future<void> getMemoryInfo() async {
+    await sendCommand("GET_INFO");
   }
 
-  /// -- 9. Verify Devices Current Status
-  Future<void> verifyDeviceStatus() async {
-    if (await Permission.location.request().isGranted) {
-      if (await Permission.bluetoothScan.request().isGranted
-          && await Permission.bluetoothConnect.request().isGranted
-          && await Permission.locationWhenInUse.request().isGranted) {
+  Future<void> eraseData() async {
+    if (!isConnected.value) return;
 
-        /// Update Paired and Connected devices list
-        List<BluetoothDevice> bondedDevices = await FlutterBluetoothSerial.instance.getBondedDevices();
-        if (bondedDevices.isNotEmpty) {
-          for (var device in bondedDevices) {
-            updateDeviceName(device);
-            if (device.isConnected) {
-              if (!connectedDevices.contains(device)) connectedDevices.add(device);
-              pairedDevices.removeWhere((d) => d.address == device.address);
-            } else if (device.isBonded && !device.isConnected) {
-              if (!pairedDevices.contains(device)) pairedDevices.add(device);
-              connectedDevices.removeWhere((d) => d.address == device.address);
-            }
-          }
+    Get.dialog(
+      AlertDialog(
+        title: Text("Erase Data?"),
+        content: Text("This will erase all data on the smartwatch. Continue?"),
+        actions: [
+          TextButton(onPressed: () => Get.back(result: false), child: Text("Cancel")),
+          TextButton(onPressed: () => Get.back(result: true), child: Text("Erase"),),
+        ],
+      ),
+    ).then((confirm) async {
+      if (confirm == true) {
+        await sendCommand("ERASE_DATA");
+        sensorData.clear();
+        clearGraphData();
+        memoryUsed.value = 0;
+        memoryFree.value = 0;
+        memoryPercentage.value = 0.0;
 
-          /// Discover new devices and update the list
-          newDevices.removeWhere((d) => bondedDevices.any((b) => b.address == d.address));
-          filteredDevices.removeWhere((d) => bondedDevices.any((b) => b.address == d.address));
-        }
+        Get.snackbar("Data Erased", "All data and graphs have been cleared", snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.orange, colorText: Colors.white);
       }
+    });
+  }
+
+  Future<void> exportToCSV() async {
+    if (sensorData.isEmpty) {
+      Get.snackbar("No Data", "No data to export", snackPosition: SnackPosition.BOTTOM);
+      return;
+    }
+
+    try {
+      List<List<dynamic>> csvData = [['Packet', 'Timestamp', 'Heart Rate', 'SpO2', 'Accel X', 'Accel Y', 'Accel Z', 'Gyro X', 'Gyro Y', 'Gyro Z', 'Received At']];
+
+      for (var data in sensorData) {
+        csvData.add([data.packetNumber, data.timestamp, data.heartRate, data.spO2, data.accelX, data.accelY, data.accelZ, data.gyroX, data.gyroY, data.gyroZ, data.receivedAt.toIso8601String()]);
+      }
+
+      String csv = const ListToCsvConverter().convert(csvData);
+
+      final directory = await getDownloadsDirectory();
+      final path = directory?.path;
+
+      if (path == null) throw Exception("Could not access storage");
+
+      String fileName = 'smartwatch_data_${DateTime.now().millisecondsSinceEpoch}.csv';
+      File file = File('$path/$fileName');
+
+      await file.writeAsString(csv);
+
+      Get.snackbar("Export Successful", "Data exported to $fileName", snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.green, colorText: Colors.white);
+    } catch (e) {
+      Get.snackbar("Export Failed", "Export failed: $e", snackPosition: SnackPosition.BOTTOM, backgroundColor: Colors.red, colorText: Colors.white);
     }
   }
 
-  /// -- 10. Check Device Requirements
-  Future<int> checkAllRequirements() async {
-    switchController.isBluetoothActive();
-    switchController.isLocationActive();
+  void _onDisconnected() {
+    isConnected.value = false;
+    connectedDevice = null;
+    smartWatchService = null;
+    dataCharacteristic = null;
+    commandCharacteristic = null;
+    updateStatus("Disconnected");
+    dataSubscription?.cancel();
+  }
 
-    await Future.delayed(Duration(milliseconds: 400));
-
-    if (!switchController.isBluetoothOn.value) {
-      return 1;
-    } else if (!switchController.isLocationOn.value) {
-      return 2;
+  Future<void> disconnect() async {
+    dataSubscription?.cancel();
+    if (connectedDevice != null) {
+      await connectedDevice!.disconnect();
     }
-    return 0;
-  }
-
-  /// -- 11. Show Requirements Messages
-  void showRequiredMessage(int i) {
-    if (i == 1) {
-      TLoaders.warningSnackBar(title: 'Bluetooth Turn On', message: 'Please turn on your device bluetooth');
-    } else if (i == 2) {
-      TLoaders.warningSnackBar(title: 'Location Turn On', message: 'Please turn on your device location');
-    }
-  }
-
-  /// -- 12. Search on NewDevices List
-  void filterAvailableDevices(String query) {
-    query.isEmpty
-        ? filteredDevices.assignAll(newDevices)
-        : filteredDevices.assignAll(newDevices.where((device) => device.name?.toLowerCase().contains(query.toLowerCase()) ?? false));
-  }
-
-  /// -- 13. Update Device Name
-  Future<String> updateDeviceName(BluetoothDevice device) async {
-    final name = await repository.getBluetoothByMac(device);
-    return deviceNames[device.address] = name;
-  }
-
-  /// -- 14. Start the background task
-  Future<void> startVerifyingDeviceStatus() async {
-    while (true) {
-      await verifyDeviceStatus();
-      await Future.delayed(const Duration(milliseconds: 300));
-    }
-  }
-
-  /// -- 15. Stop the background task
-  void stopVerifyingDeviceStatus() {
-    _timer?.cancel();
-    _timer = null;
+    _onDisconnected();
   }
 }
