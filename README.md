@@ -24,6 +24,7 @@ Run Flutter Doctor:
 Open your Terminal.
 Run flutter doctor.
 This command checks your environment and displays a report of the status of your Flutter installation. Address any issues it reports by following the provided instructions.
+
 2. Cloning a Project from GitHub by SSH Link in Android Studio
 Generate SSH Key (if not already done): Follow GitHub's instructions to generate an SSH key and add it to your GitHub account.
 Copy SSH URL: On GitHub, navigate to your project repository, click the "Code" button, and copy the SSH URL.
@@ -34,6 +35,7 @@ Select Git.
 Paste the copied SSH URL into the URL field.
 Specify the Directory where you want to clone the project.
 Click Clone.
+
 3. Basic Folder Structure and Use Cases
 Folder/File
 Use Case
@@ -83,6 +85,7 @@ Add privacy descriptions for sensitive permissions. For example, for camera acce
 Making Changes in Your Code
 Edit Dart files in the lib/ directory.
 After making changes, save the file. Flutter's hot reload feature will instantly update your running application without a full restart.
+
 5. Running Your Project on a Real Device or in a Virtual Machine
 Running on a Real Device (iOS)
 Connect Device: Connect your iPhone or iPad to your MacBook via USB.
@@ -115,6 +118,7 @@ Configure the emulator settings and click Finish.
 Launch Emulator: In the Device Manager, click the play icon next to your created emulator to launch it.
 Select Emulator in Android Studio: In Android Studio, select your running emulator from the device dropdown menu.
 Run: Click the green play button in Android Studio or run flutter run in the Terminal.
+
 6. General Instructions for Understanding Code
 Start with main.dart: This is the entry point. It typically defines the root widget of your application.
 Understand Widgets: Flutter applications are built entirely from widgets. Everything you see on the screen (text, buttons, layouts) is a widget.
@@ -127,6 +131,7 @@ Read Comments: Developers often add comments to explain complex logic.
 Use the Debugger: Android Studio's debugger allows you to step through code, inspect variable values, and understand execution flow.
 Consult Documentation: When you encounter an unfamiliar widget or concept, refer to the official Flutter documentation or the Dart package documentation.
 Identify State Management: For larger applications, understand how the app's data (state) is managed (e.g., Provider, BLoC, GetX).
+
 7. Basic Idea About GetxController
 GetxController is a part of the GetX state management solution for Flutter. It's a simple and powerful way to manage the state of your application.
 
@@ -149,8 +154,8 @@ Example:class CounterController extends GetxController {
 }
 
 // In your UI:
-
 Obx(() => Text("Count: ${Get.find<CounterController>().count.value}"))
+
 8. Common Errors During Setup and How to Handle Them
 Error Message
 Cause
