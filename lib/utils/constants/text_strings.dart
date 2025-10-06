@@ -7,7 +7,7 @@ class TTexts {
   static const String skip = "Skip";
   static const String done = "Done";
   static const String submit = "Submit";
-  static const String appName = "Dripto";
+  static const String appName = "Utritionist";
   static const String tContinue = "Continue";
   static const String cancel = "Cancel";
   static const String save = "Save";

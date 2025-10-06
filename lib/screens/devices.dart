@@ -1,3 +1,4 @@
+import 'package:blue/screens/sync_data.dart';
 import 'package:blue/screens/widgets/button_widget.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -29,7 +30,7 @@ class DevicesScreen extends StatelessWidget {
         ),
         actions: [
           Obx(() => ButtonWidget(icon: Iconsax.refresh, isActive: controller.isConnected.value, onTap: () => controller.getMemoryInfo())),
-          Obx(() => ButtonWidget(icon: Iconsax.cloud_connection, isActive: true, onTap: () => controller.startScan())),
+          Obx(() => ButtonWidget(icon: Iconsax.cloud_connection, isActive: controller.isConnected.value, onTap: () => Get.to(() => SyncDataScreen()))),
         ],
       ),
       body: SingleChildScrollView(
@@ -39,6 +40,40 @@ class DevicesScreen extends StatelessWidget {
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(horizontal: TSizes.md, vertical: TSizes.lg),
+                  decoration: BoxDecoration(
+                      color: (controller.isConnected.value ? Colors.green : controller.isScanning.value ? Colors.orange : Colors.red).shade50,
+                      border: Border.all(color: controller.isConnected.value ? Colors.green : controller.isScanning.value ? Colors.orange : Colors.red),
+                      borderRadius: BorderRadius.circular(TSizes.borderRadiusMd)
+                  ),
+                  child: Text(controller.statusMessage.value, style: GoogleFonts.recursive(color: controller.isConnected.value ? Colors.green : controller.isScanning.value ? Colors.orange : Colors.red)),
+                ),
+                SizedBox(height: TSizes.spaceBtwItems),
+
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  spacing: TSizes.defaultSpace,
+                  children: [
+                    Obx(() => mainButton(controller.isConnected.value ? "Disconnect" : "Connect", controller.isConnected.value ? Iconsax.link_21 : Iconsax.link, () => controller.isConnected.value ? controller.disconnect() : controller.startScan())),
+                    Obx(() => mainButton((controller.isConnected.value && controller.isSyncing.value) ? "Stop Sync" : "Sync Data", (controller.isConnected.value && controller.isSyncing.value) ? Iconsax.stop_circle : Iconsax.repeat, () => (controller.isConnected.value && controller.isSyncing.value) ? controller.stopSyncData() : controller.syncData())),
+                  ],
+                ),
+                SizedBox(height: TSizes.spaceBtwItems),
+
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  spacing: TSizes.defaultSpace,
+                  children: [
+                    mainButton("Get Info", Iconsax.information, () => controller.getMemoryInfo()),
+                    mainButton("Erase Data", Iconsax.trush_square, () => controller.eraseData()),
+                  ],
+                ),
+                SizedBox(height: TSizes.spaceBtwSections),
+
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   spacing: TSizes.md,
@@ -404,6 +439,27 @@ class DevicesScreen extends StatelessWidget {
               ],
             ),
         ),
+        ),
+      ),
+    );
+  }
+
+  Expanded mainButton(String title, IconData iconData, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(color: TColors.primary, borderRadius: BorderRadius.circular(TSizes.borderRadiusLg)),
+          padding: EdgeInsets.symmetric(vertical: TSizes.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
+            spacing: TSizes.sm,
+            children: [
+              Icon(iconData, color: TColors.white, size: TSizes.iconMd),
+              Text(title, style: GoogleFonts.recursive(color: TColors.white, fontSize: TSizes.fontSizeSm, fontWeight: FontWeight.w500))
+            ],
+          ),
         ),
       ),
     );

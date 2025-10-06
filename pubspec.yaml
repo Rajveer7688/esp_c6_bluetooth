@@ -26,6 +26,9 @@ dependencies:
   iconsax: ^0.0.8
   cupertino_icons: ^1.0.8
 
+  # Table
+  data_table_2: ^2.5.18
+
   # Firebase
   firebase_core: ^3.9.0
   cloud_firestore: ^5.6.0
